@@ -1,0 +1,57 @@
+name: AI QA Engineer
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_prompt:
+        description: "High-level QA instruction"
+        required: true
+        default: "Lakukan testing terhadap fitur Pindah Meja secara menyeluruh."
+      max_steps:
+        description: "Maximum browser actions per test point"
+        required: true
+        default: "40"
+
+jobs:
+  ai-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      BASE_URL: https://webpos-v2.missarirasa.com/
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      QA_USERNAME: ${{ secrets.QA_USERNAME }}
+      QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      TEST_PROMPT: ${{ inputs.test_prompt }}
+      MAX_STEPS: ${{ inputs.max_steps }}
+      HEADLESS: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run AI QA Engineer
+        run: npm run test:ai
+
+      - name: Upload execution evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-qa-${{ github.run_number }}
+          path: evidence/
+          retention-days: 7
