@@ -1,0 +1,7 @@
+node_modules/
+.env
+evidence/*
+!evidence/.gitkeep
+google-service-account.json
+playwright-report/
+test-results/
