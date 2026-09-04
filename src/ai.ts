@@ -1,129 +1,211 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import type { AgentAction, TestPoint } from "./types.js";
 
 const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const model = process.env.GEMINI_MODEL || "gemini-3.7-flash";
 
 const system = `
 You are an autonomous senior QA engineer operating a STAGING web application.
 
-Your job is to:
-1. Understand the feature requested by the user.
-2. Discover relevant test points autonomously.
-3. Execute those test points through browser actions.
-4. Observe actual application behavior.
-5. Compare actual behavior against expected behavior.
-6. Record a clear QA result.
+Your responsibility is to:
+1. Understand the user's high-level testing request.
+2. Discover the relevant functionality in the web application.
+3. Generate practical and comprehensive test points.
+4. Execute the test points through browser actions.
+5. Observe the actual application behavior.
+6. Compare actual behavior against expected behavior.
+7. Adapt when the UI differs from expectations.
+8. Determine PASS, FAIL, or BLOCKED based on evidence.
+9. Produce concise QA findings suitable for a test report.
 
-Rules:
-1. Stay within the requested feature scope.
-2. Prefer safe, non-destructive actions.
-3. Never perform real payments, production actions, deletion,
-   irreversible actions, or security-sensitive changes.
-4. Use supplied test credentials only for login.
-5. Never repeat passwords in reasoning, logs, screenshots descriptions,
-   or reports.
-6. Explore the UI when necessary.
-7. Do not assume selectors.
-8. Generate a broad but practical set of test points:
-   positive, negative, validation, boundary/state,
-   integration, and error handling when relevant.
-9. A test point must be based on something that can actually
-   be executed or observed.
-10. For each browser step, return EXACTLY ONE JSON action object.
-11. After each action, the runner will provide a fresh accessible UI snapshot.
-12. If an action fails, adapt using the current UI rather than blindly repeating it.
-13. When enough evidence exists, finish with PASS, FAIL, or BLOCKED.
-14. Keep summaries concise and factual.
+IMPORTANT:
+The user may give only a high-level instruction such as:
+"Lakukan testing terhadap fitur Pindah Meja."
 
-Action schema:
+You must then determine the relevant test coverage yourself.
+
+TEST COVERAGE SHOULD CONSIDER WHEN RELEVANT:
+- Positive scenarios
+- Negative scenarios
+- Required field validation
+- Invalid input
+- Boundary conditions
+- Empty state
+- Existing data
+- Different selections
+- Confirmation/cancellation
+- State transitions
+- UI behavior
+- Integration behavior
+- Error handling
+- Data consistency
+- Permission/access behavior when observable
+
+SAFETY:
+- This is a STAGING environment.
+- Never perform real payments.
+- Never perform destructive production actions.
+- Never delete important data unless explicitly required and safe in staging.
+- Never expose passwords or secrets.
+- Never put credentials into reasoning, summaries, screenshots descriptions, or reports.
+- Use supplied credentials only for authentication.
+
+BROWSER INTERACTION:
+- Explore the UI when necessary.
+- Do not assume selectors.
+- Prefer visible text, accessible role/name, label, placeholder, or concise descriptions.
+- Do not use CSS/XPath unless absolutely necessary.
+- Every browser action must be based on the current UI state.
+- After every action, the runner will provide a fresh UI snapshot.
+- If an action fails, adapt to the current UI instead of blindly repeating the same action.
+
+IMPORTANT EXECUTION RULE:
+For nextAction(), return EXACTLY ONE JSON action object.
+Do not return markdown.
+Do not return explanations outside the JSON object.
+
+AVAILABLE ACTIONS:
 
 goto:
-{type:"goto", url:string}
+{
+  "type": "goto",
+  "url": "https://example.com"
+}
 
 click:
-{type:"click", target:string}
+{
+  "type": "click",
+  "target": "visible button or element",
+  "reason": "why this action is required"
+}
 
 fill:
-{type:"fill", target:string, value:string}
+{
+  "type": "fill",
+  "target": "field label or placeholder",
+  "value": "value to enter",
+  "reason": "why this action is required"
+}
 
 select:
-{type:"select", target:string, value:string}
+{
+  "type": "select",
+  "target": "select element",
+  "value": "option value",
+  "reason": "why this action is required"
+}
 
 press:
-{type:"press", target:string, key:string}
+{
+  "type": "press",
+  "target": "field or element",
+  "key": "Enter",
+  "reason": "why this action is required"
+}
 
 wait:
-{type:"wait", ms:number}
+{
+  "type": "wait",
+  "ms": 1000,
+  "reason": "why waiting is required"
+}
 
 screenshot:
-{type:"screenshot", name:string}
+{
+  "type": "screenshot",
+  "name": "meaningful-name",
+  "reason": "why evidence is required"
+}
 
 assert:
-{type:"assert", target:string, expected:string}
+{
+  "type": "assert",
+  "target": "visible element",
+  "expected": "expected visible result",
+  "reason": "why this assertion is required"
+}
 
 finish:
-{type:"finish", status:"PASS"|"FAIL"|"BLOCKED", summary:string}
+{
+  "type": "finish",
+  "status": "PASS",
+  "summary": "concise result"
+}
 
-For targets, use:
-- visible text
-- accessible role/name
-- label
-- placeholder
-- concise description
+VALID FINISH STATUS:
+- PASS
+- FAIL
+- BLOCKED
 
-Do not emit CSS/XPath unless absolutely necessary.
+IMPORTANT:
+A PASS or FAIL decision must be based on observable evidence.
+If the application cannot be tested because of an environment, authentication,
+missing data, unavailable functionality, or another blocking condition,
+use BLOCKED instead of guessing.
 `;
 
-async function generateJson<T>(prompt: string): Promise<T> {
+export async function planTestPoints(task: string): Promise<TestPoint[]> {
   const response = await client.models.generateContent({
     model,
-    contents: prompt,
+    contents: `
+Create the initial test-point plan for this QA task.
+
+User task:
+${task}
+
+Generate a practical but comprehensive set of test points.
+
+Each test point must contain:
+- id
+- title
+- objective
+- expected
+
+Return ONLY the JSON array.
+`,
     config: {
       systemInstruction: system,
       responseMimeType: "application/json",
-      temperature: 0.2,
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: {
+              type: Type.STRING,
+            },
+            title: {
+              type: Type.STRING,
+            },
+            objective: {
+              type: Type.STRING,
+            },
+            expected: {
+              type: Type.STRING,
+            },
+          },
+          required: ["id", "title", "objective", "expected"],
+        },
+      },
     },
   });
 
   const text = response.text?.trim();
 
   if (!text) {
-    throw new Error("Gemini returned an empty response.");
+    throw new Error("Gemini returned an empty test-point plan.");
   }
 
-  return JSON.parse(text) as T;
-}
+  const parsed = JSON.parse(text);
 
-async function generateText(prompt: string): Promise<string> {
-  const response = await client.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      systemInstruction:
-        "You are a QA analyst. Do not expose credentials. Be concise.",
-      temperature: 0.2,
-    },
-  });
+  if (!Array.isArray(parsed)) {
+    throw new Error("Gemini returned an invalid test-point format.");
+  }
 
-  return response.text?.trim() || "";
-}
-
-export async function planTestPoints(task: string): Promise<TestPoint[]> {
-  return generateJson<TestPoint[]>(`
-Create the initial test-point plan for this QA task.
-
-Task:
-${task}
-
-Return ONLY a valid JSON array.
-
-Each test point should contain the fields required by the TestPoint
-type used by this project.
-`);
+  return parsed as TestPoint[];
 }
 
 export async function nextAction(context: {
@@ -132,27 +214,108 @@ export async function nextAction(context: {
   snapshot: string;
   history: string;
 }): Promise<AgentAction> {
-  return generateJson<AgentAction>(`
-Determine the next browser action for the current QA test.
+  const response = await client.models.generateContent({
+    model,
+    contents: `
+Determine the SINGLE next browser action required to execute the current QA test point.
 
-Task:
+TASK:
 ${context.task}
 
-Current test point:
+CURRENT TEST POINT:
 ${JSON.stringify(context.testPoint)}
 
-Recent execution history:
-${context.history}
+RECENT EXECUTION HISTORY:
+${context.history || "(No previous actions.)"}
 
-Current accessible UI snapshot:
+CURRENT ACCESSIBLE UI SNAPSHOT:
 ${context.snapshot}
 
-Return ONLY ONE valid JSON action object.
+Decide what should happen next based ONLY on the current observable state.
 
-Do not return markdown.
-Do not return an array.
-Do not explain the action.
-`);
+If the test point has enough evidence to determine its result,
+return a finish action.
+
+Otherwise return exactly ONE browser action.
+
+Return ONLY one JSON action object.
+`,
+    config: {
+      systemInstruction: system,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          type: {
+            type: Type.STRING,
+            enum: [
+              "goto",
+              "click",
+              "fill",
+              "select",
+              "press",
+              "wait",
+              "screenshot",
+              "assert",
+              "finish",
+            ],
+          },
+
+          url: {
+            type: Type.STRING,
+          },
+
+          target: {
+            type: Type.STRING,
+          },
+
+          value: {
+            type: Type.STRING,
+          },
+
+          key: {
+            type: Type.STRING,
+          },
+
+          ms: {
+            type: Type.INTEGER,
+          },
+
+          name: {
+            type: Type.STRING,
+          },
+
+          expected: {
+            type: Type.STRING,
+          },
+
+          reason: {
+            type: Type.STRING,
+          },
+
+          status: {
+            type: Type.STRING,
+            enum: ["PASS", "FAIL", "BLOCKED"],
+          },
+
+          summary: {
+            type: Type.STRING,
+          },
+        },
+        required: ["type"],
+      },
+    },
+  });
+
+  const text = response.text?.trim();
+
+  if (!text) {
+    throw new Error("Gemini returned an empty browser action.");
+  }
+
+  const parsed = JSON.parse(text);
+
+  return parsed as AgentAction;
 }
 
 export async function analyzeFailure(input: {
@@ -160,24 +323,38 @@ export async function analyzeFailure(input: {
   expected: string;
   actual: string;
 }): Promise<string> {
-  return generateText(`
-Analyze this QA test result.
+  const response = await client.models.generateContent({
+    model,
+    contents: `
+Analyze the following QA test result.
 
-Test point:
+TEST POINT:
 ${JSON.stringify(input.testPoint)}
 
-Expected:
+EXPECTED:
 ${input.expected}
 
-Actual:
+ACTUAL:
 ${input.actual}
 
-Provide:
-1. Likely defect or observation
-2. Severity recommendation
-3. Short explanation
+Provide a concise QA analysis containing:
+- Observation
+- Likely defect or cause
+- Severity recommendation
+- Suggested follow-up
 
-Do not expose credentials.
-Be concise.
-`);
+Do not expose credentials or secrets.
+`,
+    config: {
+      systemInstruction: `
+You are a senior QA analyst.
+Analyze evidence objectively.
+Do not invent behavior that was not observed.
+Do not expose credentials or secrets.
+Keep the response concise and suitable for a QA report.
+`,
+    },
+  });
+
+  return response.text?.trim() || "No AI analysis was returned.";
 }
