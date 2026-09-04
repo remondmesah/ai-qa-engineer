@@ -13,7 +13,7 @@ const task = process.env.TEST_PROMPT ||
 const maxSteps = Number(process.env.MAX_STEPS || 40);
 const runId = `RUN-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${crypto.randomBytes(2).toString("hex")}`;
 
-if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required.");
+if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is required.");
 
 console.log(`\nAI QA ENGINEER — ${runId}`);
 console.log(`TASK: ${task}\n`);
