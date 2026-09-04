@@ -34,16 +34,16 @@ export async function executeAction(page: Page, action: AgentAction, runId: stri
       await page.goto(action.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       break;
     case "click":
-      await findTarget(page, action.target).click({ timeout: 15000 });
+      await (await findTarget(page, action.target)).click({ timeout: 15000 });
       break;
     case "fill":
-      await findTarget(page, action.target).fill(action.value, { timeout: 15000 });
+      await (await findTarget(page, action.target)).fill(action.value, { timeout: 15000 });
       break;
     case "select":
-      await findTarget(page, action.target).selectOption(action.value, { timeout: 15000 });
+      await (await findTarget(page, action.target)).selectOption(action.value, { timeout: 15000 });
       break;
     case "press":
-      await findTarget(page, action.target).press(action.key, { timeout: 15000 });
+      await (await findTarget(page, action.target)).press(action.key, { timeout: 15000 });
       break;
     case "wait":
       await page.waitForTimeout(Math.min(action.ms, 10000));
