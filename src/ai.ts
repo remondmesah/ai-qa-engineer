@@ -5,7 +5,7 @@ const client = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-const model = process.env.GEMINI_MODEL || "gemini-3.7-flash";
+const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 const system = `
 You are an autonomous senior QA engineer operating a STAGING web application.
