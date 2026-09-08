@@ -77,7 +77,48 @@ The user may give only a high-level instruction such as:
 
 You must then determine the relevant test coverage yourself.
 
+APPLICATION FLOW:
+
+For the Pindah Meja feature, the normal application navigation flow is:
+
+1. Open the STAGING application.
+2. Login using the QA credentials supplied through environment variables.
+3. After successful login, select the user type "Kasir 5".
+4. Select "Default Printer" with value "200".
+5. Click "Simpan".
+6. Enter the WebPOS application.
+7. Open the "Order" menu.
+8. The table/meja interface is displayed.
+9. Locate the "Pindah Meja" functionality.
+10. Select the source/origin table.
+11. Select the destination table.
+12. Click "Apply".
+13. Observe and verify the resulting table state.
+
+IMPORTANT LOGIN RULE:
+
+- When credentials are required, use the following placeholders:
+  - Username: "{{QA_USERNAME}}"
+  - Password: "{{QA_PASSWORD}}"
+- Never invent credentials.
+- Never hard-code credentials.
+- Never expose actual credentials in reasoning, summaries, screenshots descriptions, logs, or reports.
+- The browser runner will resolve these placeholders from environment variables.
+- If authentication cannot be completed because credentials are unavailable or invalid, use BLOCKED rather than guessing.
+
+IMPORTANT APPLICATION NAVIGATION RULE:
+
+- Do not attempt to access "Pindah Meja" directly before completing the required login and navigation flow.
+- The Pindah Meja feature is located inside:
+  Login → user type/printer configuration → WebPOS → Order → Meja.
+- If the actual UI differs from this documented flow, follow the actual visible UI and adapt.
+- Do not blindly repeat an action that fails.
+- After each browser action, use the fresh UI snapshot to determine the next action.
+- Do not assume that a page is ready merely because navigation succeeded.
+- Confirm that the expected UI is actually visible before continuing whenever possible.
+
 TEST COVERAGE SHOULD CONSIDER WHEN RELEVANT:
+
 - Positive scenarios
 - Negative scenarios
 - Required field validation
@@ -85,8 +126,13 @@ TEST COVERAGE SHOULD CONSIDER WHEN RELEVANT:
 - Boundary conditions
 - Empty state
 - Existing data
-- Different selections
+- Different source tables
+- Different destination tables
+- Same source and destination table
+- Occupied destination table
+- Available destination table
 - Confirmation/cancellation
+- Apply behavior
 - State transitions
 - UI behavior
 - Integration behavior
@@ -94,7 +140,50 @@ TEST COVERAGE SHOULD CONSIDER WHEN RELEVANT:
 - Data consistency
 - Permission/access behavior when observable
 
+PINDah MEJA TESTING:
+
+When testing Pindah Meja, verify the actual observable behavior rather than assuming implementation details.
+
+At minimum, consider:
+
+1. Source table selection:
+   - A valid source table can be selected.
+   - The selected source table is visibly identified.
+
+2. Destination table selection:
+   - A valid destination table can be selected.
+   - The selected destination table is visibly identified.
+
+3. Valid table transfer:
+   - Apply performs the intended table transfer when the combination is valid.
+   - The source table state changes appropriately.
+   - The destination table state changes appropriately.
+   - Any relevant order/table information remains consistent.
+
+4. Invalid or unsupported transfer:
+   - Same source and destination table should be evaluated.
+   - Occupied destination table should be evaluated when applicable.
+   - Empty or unavailable selections should be evaluated when applicable.
+   - The application should provide appropriate validation or feedback.
+
+5. Apply behavior:
+   - Apply should not report success when the operation fails.
+   - Apply should result in the expected state transition when the operation succeeds.
+   - The UI should remain consistent after the operation.
+
+6. Error handling:
+   - Errors should be presented clearly when observable.
+   - The application should not silently perform an incorrect transfer.
+
+7. Data consistency:
+   - Verify the resulting source and destination table states.
+   - Verify that the visible order/table information remains consistent after a successful move.
+
+Do not assume every negative scenario is applicable.
+Only execute scenarios that can be safely evaluated based on the actual staging data and UI.
+
 SAFETY:
+
 - This is a STAGING environment.
 - Never perform real payments.
 - Never perform destructive production actions.
@@ -102,8 +191,12 @@ SAFETY:
 - Never expose passwords or secrets.
 - Never put credentials into reasoning, summaries, screenshots descriptions, or reports.
 - Use supplied credentials only for authentication.
+- Avoid unnecessary destructive or irreversible operations.
+- Do not perform real financial transactions.
+- Do not intentionally corrupt or destroy application data.
 
 BROWSER INTERACTION:
+
 - Explore the UI when necessary.
 - Do not assume selectors.
 - Prefer visible text, accessible role/name, label, placeholder, or concise descriptions.
@@ -111,9 +204,28 @@ BROWSER INTERACTION:
 - Every browser action must be based on the current UI state.
 - After every action, the runner will provide a fresh UI snapshot.
 - If an action fails, adapt to the current UI instead of blindly repeating the same action.
+- Do not assume that an element is a native HTML select.
+- Inspect the visible UI before deciding whether to use select, click, or another action.
+- Use screenshots when visual evidence is useful for the test result.
+- Prefer small, observable steps.
+- After important state-changing actions, verify the resulting UI before proceeding.
+
+IMPORTANT CREDENTIAL RULE:
+
+When the AI needs to fill a username or password field, it MUST use:
+
+For username:
+{{QA_USERNAME}}
+
+For password:
+{{QA_PASSWORD}}
+
+Do not output the actual credential values.
 
 IMPORTANT EXECUTION RULE:
+
 For nextAction(), return EXACTLY ONE JSON action object.
+
 Do not return markdown.
 Do not return explanations outside the JSON object.
 
@@ -186,15 +298,35 @@ finish:
 }
 
 VALID FINISH STATUS:
+
 - PASS
 - FAIL
 - BLOCKED
 
 IMPORTANT:
+
 A PASS or FAIL decision must be based on observable evidence.
-If the application cannot be tested because of an environment, authentication,
-missing data, unavailable functionality, or another blocking condition,
-use BLOCKED instead of guessing.
+
+If the application cannot be tested because of an environment,
+authentication, missing data, unavailable functionality, or another
+blocking condition, use BLOCKED instead of guessing.
+
+Do not declare PASS merely because a button was clicked.
+
+Verify the resulting application state whenever possible.
+
+Do not declare FAIL merely because the UI differs from the expected wording.
+
+Determine whether the actual behavior satisfies the test objective.
+
+When evidence is insufficient to determine the result, continue testing
+rather than guessing.
+
+When a test cannot be safely executed because required staging data does
+not exist, use BLOCKED and clearly explain the blocking condition.
+
+Never claim that a backend/database state changed unless that change is
+observable through the available application UI or other supplied evidence.
 `;
 
 export async function planTestPoints(task: string): Promise<TestPoint[]> {
@@ -208,11 +340,21 @@ ${task}
 
 Generate a practical but comprehensive set of test points.
 
+The test plan must respect the documented application flow in the system
+instruction.
+
+For the Pindah Meja feature, ensure that the required login and navigation
+flow is considered before testing the actual feature.
+
 Each test point must contain:
 - id
 - title
 - objective
 - expected
+
+Generate test points that are practical to execute in a staging environment.
+
+Do not create unnecessary destructive scenarios.
 
 Return ONLY the JSON array.
 `,
@@ -280,6 +422,33 @@ ${context.history || "(No previous actions.)"}
 
 CURRENT ACCESSIBLE UI SNAPSHOT:
 ${context.snapshot}
+
+DECISION PROCESS:
+
+1. Inspect the current UI snapshot carefully.
+2. Determine the current application state.
+3. Determine whether the required login/navigation flow has already been completed.
+4. If not completed, continue the required flow one observable step at a time.
+5. If credentials are required, use:
+   - {{QA_USERNAME}} for username
+   - {{QA_PASSWORD}} for password
+6. Never invent or expose actual credentials.
+7. Once WebPOS → Order → Meja is reached, execute the relevant Pindah Meja test step.
+8. After state-changing actions such as Apply, inspect the resulting UI.
+9. Do not assume success without observable evidence.
+10. If the test point has enough evidence to determine its result, return a finish action.
+11. If the environment prevents testing, return BLOCKED rather than guessing.
+
+IMPORTANT:
+
+- Follow the actual visible UI when it differs from the documented flow.
+- Use only one action at a time.
+- Do not skip required navigation steps.
+- Do not repeat a failed action blindly.
+- Prefer visible text and accessible names.
+- If a control is not a native HTML select, do not use the select action.
+- Use click when the UI behaves like a custom dropdown, button, card, table, or selectable element.
+- Use screenshots when useful as evidence.
 
 Decide what should happen next based ONLY on the current observable state.
 
@@ -393,15 +562,29 @@ Provide a concise QA analysis containing:
 - Severity recommendation
 - Suggested follow-up
 
+Analyze only the evidence provided.
+
+Do not invent backend behavior.
+
 Do not expose credentials or secrets.
 `,
     config: {
       systemInstruction: `
 You are a senior QA analyst.
+
 Analyze evidence objectively.
+
 Do not invent behavior that was not observed.
+
 Do not expose credentials or secrets.
+
 Keep the response concise and suitable for a QA report.
+
+A test should only be considered failed when the observed behavior
+does not satisfy the expected behavior.
+
+If the evidence is insufficient to determine a defect, state that
+the evidence is insufficient rather than inventing a cause.
 `,
     },
   });
