@@ -7,6 +7,56 @@ const client = new GoogleGenAI({
 
 const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
+/**
+ * Call Gemini with automatic retry for temporary availability errors.
+ *
+ * Retry strategy:
+ * Attempt 1 → immediate
+ * Attempt 2 → wait 5 seconds
+ * Attempt 3 → wait 10 seconds
+ *
+ * Only temporary Gemini availability errors are retried.
+ * Other errors are immediately propagated.
+ */
+async function generateWithRetry(
+  params: Parameters<typeof client.models.generateContent>[0],
+  maxRetries = 3
+) {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.models.generateContent(params);
+    } catch (error) {
+      lastError = error;
+
+      const message =
+        error instanceof Error ? error.message : String(error);
+
+      const retryable =
+        message.includes("503") ||
+        message.includes("UNAVAILABLE") ||
+        message.includes("high demand") ||
+        message.includes("temporarily unavailable");
+
+      if (!retryable || attempt === maxRetries) {
+        throw error;
+      }
+
+      const delay = attempt * 5000;
+
+      console.log(
+        `Gemini temporarily unavailable. ` +
+          `Retry ${attempt}/${maxRetries} in ${delay / 1000}s...`
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 const system = `
 You are an autonomous senior QA engineer operating a STAGING web application.
 
@@ -148,7 +198,7 @@ use BLOCKED instead of guessing.
 `;
 
 export async function planTestPoints(task: string): Promise<TestPoint[]> {
-  const response = await client.models.generateContent({
+  const response = await generateWithRetry({
     model,
     contents: `
 Create the initial test-point plan for this QA task.
@@ -214,7 +264,7 @@ export async function nextAction(context: {
   snapshot: string;
   history: string;
 }): Promise<AgentAction> {
-  const response = await client.models.generateContent({
+  const response = await generateWithRetry({
     model,
     contents: `
 Determine the SINGLE next browser action required to execute the current QA test point.
@@ -323,7 +373,7 @@ export async function analyzeFailure(input: {
   expected: string;
   actual: string;
 }): Promise<string> {
-  const response = await client.models.generateContent({
+  const response = await generateWithRetry({
     model,
     contents: `
 Analyze the following QA test result.
